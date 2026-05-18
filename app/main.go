@@ -100,6 +100,4 @@ func main() {
 		// No tool calls, print the message content
 		fmt.Print(resp.Choices[0].Message.Content)
 	}
-
-	fmt.Print(resp.Choices[0].Message.Content)
 }
