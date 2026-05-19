@@ -176,7 +176,7 @@ func main() {
 			}
 		} else {
 			// No tool calls, print the message content
-			fmt.Sprint(message.Content)
+			fmt.Println(message.Content)
 		}
 	}
 }
