@@ -118,6 +118,8 @@ func main() {
 			for _, toolCall := range message.ToolCalls {
 
 				toolName := toolCall.Function.Name
+				fmt.Print(choice.Message.Content)
+				fmt.Print(toolName)
 				if toolName == "read_file" {
 					var args struct {
 						FilePath string `json:"file_path"`
@@ -133,7 +135,8 @@ func main() {
 						fmt.Sprintf("Error: %v", error)
 						os.Exit(1)
 					}
-
+					fmt.Print(choice.Message.Content)
+					fmt.Print(string(result))
 					messages = append(messages, openai.ToolMessage(string(result), toolCall.ID))
 				} else if toolName == "write_file" {
 					var args struct {
@@ -151,8 +154,9 @@ func main() {
 						fmt.Sprintf("Error: %v", err)
 						os.Exit(1)
 					}
-
+					fmt.Print(choice.Message.Content)
 					messages = append(messages, openai.ToolMessage("File written successfully", toolCall.ID))
+
 				} else if toolName == "bash" {
 					var args struct {
 						Command string `json:"command"`
@@ -168,7 +172,8 @@ func main() {
 						fmt.Sprintf("Error: %v", error)
 						os.Exit(1)
 					}
-
+					fmt.Print(choice.Message.Content)
+					fmt.Print(string(result))
 					messages = append(messages, openai.ToolMessage(string(result), toolCall.ID))
 				}
 			}
