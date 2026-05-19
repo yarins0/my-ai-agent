@@ -111,7 +111,7 @@ func main() {
 		choice := resp.Choices[0]
 		message := choice.Message
 
-		fmt.Fprintln(os.Stderr, "input messeges: ", messages)
+		fmt.Fprintln(os.Stderr, "input messeges: ", message.Content)
 		messages = append(messages, message.ToParam())
 
 		if len(message.ToolCalls) > 0 {
@@ -177,7 +177,7 @@ func main() {
 			}
 		} else {
 			// No tool calls, print the message content
-			fmt.Fprintln(os.Stderr, "message content: ", choice.Message.Content)
+			fmt.Sprint(message.Content)
 		}
 	}
 }
