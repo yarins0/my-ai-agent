@@ -111,6 +111,7 @@ func main() {
 		choice := resp.Choices[0]
 		message := choice.Message
 
+		fmt.Fprintln(os.Stderr, "input messeges: ", messages)
 		messages = append(messages, message.ToParam())
 
 		if len(message.ToolCalls) > 0 {
@@ -118,8 +119,6 @@ func main() {
 			for _, toolCall := range message.ToolCalls {
 
 				toolName := toolCall.Function.Name
-				fmt.Print(choice.Message.Content)
-				fmt.Print(toolName)
 				if toolName == "read_file" {
 					var args struct {
 						FilePath string `json:"file_path"`
@@ -135,8 +134,7 @@ func main() {
 						fmt.Sprintf("Error: %v", error)
 						os.Exit(1)
 					}
-					fmt.Print(choice.Message.Content)
-					fmt.Print(string(result))
+					fmt.Fprintln(os.Stderr, "read file: ", string(args.FilePath), string(result))
 					messages = append(messages, openai.ToolMessage(string(result), toolCall.ID))
 				} else if toolName == "write_file" {
 					var args struct {
@@ -154,7 +152,7 @@ func main() {
 						fmt.Sprintf("Error: %v", err)
 						os.Exit(1)
 					}
-					fmt.Print(choice.Message.Content)
+					fmt.Fprintln(os.Stderr, "write file: ", string(args.FilePath), string(args.Content))
 					messages = append(messages, openai.ToolMessage("File written successfully", toolCall.ID))
 
 				} else if toolName == "bash" {
@@ -172,14 +170,14 @@ func main() {
 						fmt.Sprintf("Error: %v", error)
 						os.Exit(1)
 					}
-					fmt.Print(choice.Message.Content)
-					fmt.Print(string(result))
+					fmt.Fprintln(os.Stderr, "bash command: ", string(args.Command))
+					fmt.Fprintln(os.Stderr, "bash result: ", string(result))
 					messages = append(messages, openai.ToolMessage(string(result), toolCall.ID))
 				}
 			}
 		} else {
 			// No tool calls, print the message content
-			fmt.Print(choice.Message.Content)
+			fmt.Fprintln(os.Stderr, "message content: ", choice.Message.Content)
 		}
 	}
 }
