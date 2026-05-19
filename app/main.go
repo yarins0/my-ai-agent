@@ -106,12 +106,11 @@ func main() {
 			panic("No choices in response")
 		}
 		// You can use print statements as follows for debugging, they'll be visible when running tests.
-		fmt.Fprintln(os.Stderr, "Logs from your program will appear here!")
+		// fmt.Fprintln(os.Stderr, "Logs from your program will appear here!")
 
 		choice := resp.Choices[0]
 		message := choice.Message
 
-		fmt.Fprintln(os.Stderr, "input messeges: ", message.Content)
 		messages = append(messages, message.ToParam())
 
 		if len(message.ToolCalls) > 0 {
@@ -136,6 +135,7 @@ func main() {
 					}
 					fmt.Fprintln(os.Stderr, "read file: ", string(args.FilePath), string(result))
 					messages = append(messages, openai.ToolMessage(string(result), toolCall.ID))
+
 				} else if toolName == "write_file" {
 					var args struct {
 						FilePath string `json:"file_path"`
