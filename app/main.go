@@ -131,10 +131,9 @@ func main() {
 					result, error := os.ReadFile(args.FilePath)
 					if error != nil {
 						fmt.Sprintf("Error: %v", error)
-						os.Exit(1)
 					}
-					fmt.Fprintln(os.Stderr, "read file: ", string(args.FilePath), string(result))
 					messages = append(messages, openai.ToolMessage(string(result), toolCall.ID))
+					fmt.Fprintln(os.Stderr, "read file: ", string(args.FilePath), "Gave: ", string(result))
 
 				} else if toolName == "write_file" {
 					var args struct {
