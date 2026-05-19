@@ -52,6 +52,24 @@ func main() {
 				"required": []string{"file_path"},
 			},
 		}),
+		openai.ChatCompletionFunctionTool(openai.FunctionDefinitionParam{
+			Name:        "write_file",
+			Description: openai.String("Write content to a file"),
+			Parameters: openai.FunctionParameters{
+				"type": "object",
+				"properties": map[string]any{
+					"file_path": map[string]any{
+						"type":        "string",
+						"description": "The path to the file to write to",
+					},
+					"content": map[string]any{
+						"type":        "string",
+						"description": "The content to write to the file",
+					},
+				},
+				"required": []string{"file_path", "content"},
+			},
+		}),
 	}
 
 	for round := 0; round < 5; round++ {
@@ -98,12 +116,31 @@ func main() {
 					result, error := os.ReadFile(args.FilePath)
 					if error != nil {
 						fmt.Sprintf("Error: %v", error)
+						os.Exit(1)
 					}
 
 					messages = append(messages, openai.ToolMessage(string(result), toolCall.ID))
 				}
-			}
+				if toolName == "write_file" {
+					var args struct {
+						FilePath string `json:"file_path"`
+						Content  string `json:"content"`
+					}
+					err := json.NewDecoder(strings.NewReader(string(toolCall.Function.Arguments))).Decode(&args)
+					if err != nil {
+						fmt.Sprintf("Error: %v", err)
+						os.Exit(1)
+					}
 
+					err = os.WriteFile(args.FilePath, []byte(args.Content), 0644)
+					if err != nil {
+						fmt.Sprintf("Error: %v", err)
+						os.Exit(1)
+					}
+
+					messages = append(messages, openai.ToolMessage("File written successfully", toolCall.ID))
+				}
+			}
 		} else {
 			// No tool calls, print the message content
 			fmt.Print(choice.Message.Content)
