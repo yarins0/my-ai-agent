@@ -6,12 +6,13 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"os/exec"
 	"strings"
 
 	"github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
 )
+
+const MAX_ITERATIONS = 5
 
 func main() {
 	var prompt string
@@ -87,7 +88,7 @@ func main() {
 		}),
 	}
 
-	for round := 0; round < 5; round++ {
+	for round := 0; round < MAX_ITERATIONS; round++ {
 
 		params := openai.ChatCompletionNewParams{
 			Model:     "anthropic/claude-haiku-4.5",
@@ -133,92 +134,6 @@ func main() {
 
 func decodeArgs(raw string, target any) error {
 	return json.NewDecoder(strings.NewReader(raw)).Decode(target)
-}
-
-func handleReadFileTool(arguments string) (string, error) {
-	var args ReadFileArgs
-
-	err := decodeArgs(arguments, &args)
-	if err != nil {
-		return "", err
-	}
-
-	result, err := os.ReadFile(args.FilePath)
-	if err != nil {
-		return "", err
-	}
-
-	return string(result), nil
-}
-
-func handleWriteFileTool(arguments string) (string, error) {
-	var args WriteFileArgs
-
-	err := decodeArgs(arguments, &args)
-	if err != nil {
-		return "", err
-	}
-
-	err = os.WriteFile(
-		args.FilePath,
-		[]byte(args.Content),
-		0644,
-	)
-
-	if err != nil {
-		return "", err
-	}
-
-	fmt.Fprintf(
-		os.Stderr,
-		"[tool/write_file] %s (%d bytes)\n",
-		args.FilePath,
-		len(args.Content),
-	)
-
-	return "File written successfully", nil
-}
-
-func handleBashTool(arguments string) (string, error) {
-	var args BashArgs
-
-	err := decodeArgs(arguments, &args)
-	if err != nil {
-		return "", err
-	}
-
-	result, err := exec.Command(
-		"sh",
-		"-c",
-		args.Command,
-	).Output()
-
-	if err != nil {
-		return "", err
-	}
-
-	return string(result), nil
-}
-
-type ToolHandler func(arguments string) (string, error)
-
-var _HANDLERS = map[string]ToolHandler{
-	"read_file":  handleReadFileTool,
-	"write_file": handleWriteFileTool,
-	"bash":       handleBashTool,
-}
-
-type ReadFileArgs struct {
-	FilePath string `json:"file_path"`
-}
-
-type WriteFileArgs struct {
-	FilePath string `json:"file_path"`
-	Content  string `json:"content"`
-}
-
-type BashArgs struct {
-	Command string `json:"command"`
 }
 
 func addToolMessage(messages *[]openai.ChatCompletionMessageParamUnion, content, toolID string) {
