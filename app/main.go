@@ -93,7 +93,7 @@ func main() {
 			Model:     "anthropic/claude-haiku-4.5",
 			Messages:  messages,
 			Tools:     tools,
-			MaxTokens: openai.Int(2048),
+			MaxTokens: openai.Int(256),
 		}
 
 		resp, err := client.Chat.Completions.New(context.Background(), params)
@@ -133,8 +133,11 @@ func main() {
 						os.Exit(1)
 					}
 					messages = append(messages, openai.ToolMessage(string(result), toolCall.ID))
-					fmt.Fprintln(os.Stderr, "read file: ", string(args.FilePath), "Gave: ", string(result))
-
+					fmt.Fprintf(os.Stderr,
+						"[tool/read_file] %s (%d bytes)\n",
+						args.FilePath,
+						len(result),
+					)
 				case "write_file":
 					var args struct {
 						FilePath string `json:"file_path"`
@@ -152,7 +155,11 @@ func main() {
 						fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 						os.Exit(1)
 					}
-					fmt.Fprintln(os.Stderr, "write file: ", string(args.FilePath), string(args.Content))
+					fmt.Fprintf(os.Stderr,
+						"[tool/write_file] %s (%d bytes)\n",
+						args.FilePath,
+						len(args.Content),
+					)
 					messages = append(messages, openai.ToolMessage("File written successfully", toolCall.ID))
 
 				case "bash":
@@ -170,8 +177,14 @@ func main() {
 						fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 						os.Exit(1)
 					}
-					fmt.Fprintln(os.Stderr, "bash command: ", string(args.Command))
-					fmt.Fprintln(os.Stderr, "bash result: ", string(result))
+					fmt.Fprintf(os.Stderr,
+						"[tool/bash] %s\n",
+						args.Command,
+					)
+					fmt.Fprintf(os.Stderr,
+						"[tool/bash] %s\n",
+						string(result),
+					)
 					messages = append(messages, openai.ToolMessage(string(result), toolCall.ID))
 				default:
 					fmt.Fprintf(os.Stderr, "Unknown tool: %s\n", toolCall.Function.Name)
