@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
 	"strings"
 
 	"github.com/openai/openai-go/v3"
@@ -70,6 +71,20 @@ func main() {
 				"required": []string{"file_path", "content"},
 			},
 		}),
+		openai.ChatCompletionFunctionTool(openai.FunctionDefinitionParam{
+			Name:        "bash",
+			Description: openai.String("Execute a shell command"),
+			Parameters: openai.FunctionParameters{
+				"type": "object",
+				"properties": map[string]any{
+					"command": map[string]any{
+						"type":        "string",
+						"description": "The shell command to execute",
+					},
+				},
+				"required": []string{"command"},
+			},
+		}),
 	}
 
 	for round := 0; round < 5; round++ {
@@ -120,8 +135,7 @@ func main() {
 					}
 
 					messages = append(messages, openai.ToolMessage(string(result), toolCall.ID))
-				}
-				if toolName == "write_file" {
+				} else if toolName == "write_file" {
 					var args struct {
 						FilePath string `json:"file_path"`
 						Content  string `json:"content"`
@@ -139,6 +153,23 @@ func main() {
 					}
 
 					messages = append(messages, openai.ToolMessage("File written successfully", toolCall.ID))
+				} else if toolName == "bash" {
+					var args struct {
+						Command string `json:"command"`
+					}
+					err := json.NewDecoder(strings.NewReader(string(toolCall.Function.Arguments))).Decode(&args)
+					if err != nil {
+						fmt.Sprintf("Error: %v", err)
+						os.Exit(1)
+					}
+
+					result, error := exec.Command("sh", "-c", args.Command).Output()
+					if error != nil {
+						fmt.Sprintf("Error: %v", error)
+						os.Exit(1)
+					}
+
+					messages = append(messages, openai.ToolMessage(string(result), toolCall.ID))
 				}
 			}
 		} else {
