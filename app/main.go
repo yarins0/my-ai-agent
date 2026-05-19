@@ -115,36 +115,33 @@ func main() {
 
 		if len(message.ToolCalls) > 0 {
 			for _, toolCall := range message.ToolCalls {
+				var err error
+				var result []byte
+
 				switch toolCall.Function.Name {
 				case "read_file":
 					var args struct {
 						FilePath string `json:"file_path"`
 					}
 
-					err := decodeArgs(string(toolCall.Function.Arguments), &args)
-					if err != nil {
-						fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-						os.Exit(1)
+					err = decodeArgs(string(toolCall.Function.Arguments), &args)
+					if err == nil {
+						result, err = os.ReadFile(args.FilePath)
+
+						fmt.Fprintf(os.Stderr,
+							"[tool/read_file] %s (%d bytes)\n",
+							args.FilePath,
+							len(result),
+						)
 					}
 
-					result, err := os.ReadFile(args.FilePath)
-					if err != nil {
-						fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-						os.Exit(1)
-					}
-					messages = append(messages, openai.ToolMessage(string(result), toolCall.ID))
-					fmt.Fprintf(os.Stderr,
-						"[tool/read_file] %s (%d bytes)\n",
-						args.FilePath,
-						len(result),
-					)
 				case "write_file":
 					var args struct {
 						FilePath string `json:"file_path"`
 						Content  string `json:"content"`
 					}
 
-					err := decodeArgs(string(toolCall.Function.Arguments), &args)
+					err = decodeArgs(string(toolCall.Function.Arguments), &args)
 					if err != nil {
 						fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 						os.Exit(1)
@@ -160,36 +157,37 @@ func main() {
 						args.FilePath,
 						len(args.Content),
 					)
-					messages = append(messages, openai.ToolMessage("File written successfully", toolCall.ID))
+					result = []byte("File written successfully")
 
 				case "bash":
 					var args struct {
 						Command string `json:"command"`
 					}
-					err := decodeArgs(string(toolCall.Function.Arguments), &args)
-					if err != nil {
-						fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-						os.Exit(1)
+					err = decodeArgs(string(toolCall.Function.Arguments), &args)
+					if err == nil {
+						result, err = exec.Command("sh", "-c", args.Command).Output()
+
+						fmt.Fprintf(os.Stderr,
+							"[tool/bash] %s\n",
+							args.Command,
+						)
+						fmt.Fprintf(os.Stderr,
+							"[tool/bash] %s\n",
+							string(result),
+						)
 					}
 
-					result, err := exec.Command("sh", "-c", args.Command).Output()
-					if err != nil {
-						fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-						os.Exit(1)
-					}
-					fmt.Fprintf(os.Stderr,
-						"[tool/bash] %s\n",
-						args.Command,
-					)
-					fmt.Fprintf(os.Stderr,
-						"[tool/bash] %s\n",
-						string(result),
-					)
-					messages = append(messages, openai.ToolMessage(string(result), toolCall.ID))
 				default:
 					fmt.Fprintf(os.Stderr, "Unknown tool: %s\n", toolCall.Function.Name)
 					os.Exit(1)
 				}
+
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+					os.Exit(1)
+				}
+
+				addToolMessage(&messages, string(result), toolCall.ID)
 			}
 
 		} else {
@@ -229,4 +227,8 @@ func handleBash(args struct {
 		return "", err
 	}
 	return string(result), nil
+}
+
+func addToolMessage(messages *[]openai.ChatCompletionMessageParamUnion, content, toolID string) {
+	*messages = append(*messages, openai.ToolMessage(content, toolID))
 }
