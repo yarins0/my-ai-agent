@@ -99,95 +99,28 @@ func main() {
 		resp, err := client.Chat.Completions.New(context.Background(), params)
 
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "error: %v\n", err)
-			os.Exit(1)
+			returnError(err)
 		}
 		if len(resp.Choices) == 0 {
 			panic("No choices in response")
 		}
-		// You can use print statements as follows for debugging, they'll be visible when running tests.
-		// fmt.Fprintln(os.Stderr, "Logs from your program will appear here!")
 
-		choice := resp.Choices[0]
-		message := choice.Message
+		message := resp.Choices[0].Message
 
 		messages = append(messages, message.ToParam())
 
 		if len(message.ToolCalls) > 0 {
 			for _, toolCall := range message.ToolCalls {
-				var err error
-				var result []byte
-
-				switch toolCall.Function.Name {
-				case "read_file":
-					var args struct {
-						FilePath string `json:"file_path"`
-					}
-
-					err = decodeArgs(string(toolCall.Function.Arguments), &args)
-					if err == nil {
-						result, err = os.ReadFile(args.FilePath)
-
-						fmt.Fprintf(os.Stderr,
-							"[tool/read_file] %s (%d bytes)\n",
-							args.FilePath,
-							len(result),
-						)
-					}
-
-				case "write_file":
-					var args struct {
-						FilePath string `json:"file_path"`
-						Content  string `json:"content"`
-					}
-
-					err = decodeArgs(string(toolCall.Function.Arguments), &args)
-					if err != nil {
-						fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-						os.Exit(1)
-					}
-
-					err = os.WriteFile(args.FilePath, []byte(args.Content), 0644)
-					if err != nil {
-						fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-						os.Exit(1)
-					}
-					fmt.Fprintf(os.Stderr,
-						"[tool/write_file] %s (%d bytes)\n",
-						args.FilePath,
-						len(args.Content),
-					)
-					result = []byte("File written successfully")
-
-				case "bash":
-					var args struct {
-						Command string `json:"command"`
-					}
-					err = decodeArgs(string(toolCall.Function.Arguments), &args)
-					if err == nil {
-						result, err = exec.Command("sh", "-c", args.Command).Output()
-
-						fmt.Fprintf(os.Stderr,
-							"[tool/bash] %s\n",
-							args.Command,
-						)
-						fmt.Fprintf(os.Stderr,
-							"[tool/bash] %s\n",
-							string(result),
-						)
-					}
-
-				default:
-					fmt.Fprintf(os.Stderr, "Unknown tool: %s\n", toolCall.Function.Name)
-					os.Exit(1)
+				handler, ok := _HANDLERS[toolCall.Function.Name]
+				if !ok {
+					returnError(fmt.Errorf("unknown tool"))
 				}
 
+				result, err := handler(string(toolCall.Function.Arguments))
 				if err != nil {
-					fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-					os.Exit(1)
+					returnError(err)
 				}
-
-				addToolMessage(&messages, string(result), toolCall.ID)
+				addToolMessage(&messages, result, toolCall.ID)
 			}
 
 		} else {
@@ -202,33 +135,97 @@ func decodeArgs(raw string, target any) error {
 	return json.NewDecoder(strings.NewReader(raw)).Decode(target)
 }
 
-func handleReadFile(args struct {
-	FilePath string `json:"file_path"`
-}) (string, error) {
+func handleReadFileTool(arguments string) (string, error) {
+	var args ReadFileArgs
+
+	err := decodeArgs(arguments, &args)
+	if err != nil {
+		return "", err
+	}
+
 	result, err := os.ReadFile(args.FilePath)
 	if err != nil {
 		return "", err
 	}
+
 	return string(result), nil
 }
 
-func handleWriteFile(args struct {
-	FilePath string `json:"file_path"`
-	Content  string `json:"content"`
-}) error {
-	return os.WriteFile(args.FilePath, []byte(args.Content), 0644)
-}
+func handleWriteFileTool(arguments string) (string, error) {
+	var args WriteFileArgs
 
-func handleBash(args struct {
-	Command string `json:"command"`
-}) (string, error) {
-	result, err := exec.Command("sh", "-c", args.Command).Output()
+	err := decodeArgs(arguments, &args)
 	if err != nil {
 		return "", err
 	}
+
+	err = os.WriteFile(
+		args.FilePath,
+		[]byte(args.Content),
+		0644,
+	)
+
+	if err != nil {
+		return "", err
+	}
+
+	fmt.Fprintf(
+		os.Stderr,
+		"[tool/write_file] %s (%d bytes)\n",
+		args.FilePath,
+		len(args.Content),
+	)
+
+	return "File written successfully", nil
+}
+
+func handleBashTool(arguments string) (string, error) {
+	var args BashArgs
+
+	err := decodeArgs(arguments, &args)
+	if err != nil {
+		return "", err
+	}
+
+	result, err := exec.Command(
+		"sh",
+		"-c",
+		args.Command,
+	).Output()
+
+	if err != nil {
+		return "", err
+	}
+
 	return string(result), nil
+}
+
+type ToolHandler func(arguments string) (string, error)
+
+var _HANDLERS = map[string]ToolHandler{
+	"read_file":  handleReadFileTool,
+	"write_file": handleWriteFileTool,
+	"bash":       handleBashTool,
+}
+
+type ReadFileArgs struct {
+	FilePath string `json:"file_path"`
+}
+
+type WriteFileArgs struct {
+	FilePath string `json:"file_path"`
+	Content  string `json:"content"`
+}
+
+type BashArgs struct {
+	Command string `json:"command"`
 }
 
 func addToolMessage(messages *[]openai.ChatCompletionMessageParamUnion, content, toolID string) {
 	*messages = append(*messages, openai.ToolMessage(content, toolID))
+}
+
+func returnError(err error) {
+	fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+	os.Exit(1)
 }
