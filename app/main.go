@@ -32,72 +32,81 @@ func main() {
 	}
 
 	client := openai.NewClient(option.WithAPIKey(apiKey), option.WithBaseURL(baseUrl))
-	resp, err := client.Chat.Completions.New(context.Background(),
-		openai.ChatCompletionNewParams{
-			Model: "anthropic/claude-haiku-4.5",
-			Messages: []openai.ChatCompletionMessageParamUnion{
-				{
-					OfUser: &openai.ChatCompletionUserMessageParam{
-						Content: openai.ChatCompletionUserMessageParamContentUnion{
-							OfString: openai.String(prompt),
-						},
+
+	messages := []openai.ChatCompletionMessageParamUnion{
+		openai.UserMessage(prompt),
+	}
+
+	tools := []openai.ChatCompletionToolUnionParam{
+		openai.ChatCompletionFunctionTool(openai.FunctionDefinitionParam{
+			Name:        "read_file",
+			Description: openai.String("Read and return the contents of a file"),
+			Parameters: openai.FunctionParameters{
+				"type": "object",
+				"properties": map[string]any{
+					"file_path": map[string]any{
+						"type":        "string",
+						"description": "The path to the file to read",
 					},
 				},
+				"required": []string{"file_path"},
 			},
-			Tools: []openai.ChatCompletionToolUnionParam{
-				openai.ChatCompletionFunctionTool(openai.FunctionDefinitionParam{
-					Name:        "read_file",
-					Description: openai.String("Read and return the contents of a file"),
-					Parameters: openai.FunctionParameters{
-						"type": "object",
-						"properties": map[string]any{
-							"file_path": map[string]any{
-								"type":        "string",
-								"description": "The path to the file to read",
-							},
-						},
-						"required": []string{"file_path"},
-					},
-				}),
-			},
+		}),
+	}
+
+	for round := 0; round < 5; round++ {
+
+		params := openai.ChatCompletionNewParams{
+			Model:     "anthropic/claude-haiku-4.5",
+			Messages:  messages,
+			Tools:     tools,
 			MaxTokens: openai.Int(2048),
-		},
-	)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
-	}
-	if len(resp.Choices) == 0 {
-		panic("No choices in response")
-	}
-	// You can use print statements as follows for debugging, they'll be visible when running tests.
-	fmt.Fprintln(os.Stderr, "Logs from your program will appear here!")
-
-	message := resp.Choices[0].Message
-	if len(message.ToolCalls) > 0 {
-		toolCall := message.ToolCalls[0]
-		funcName := toolCall.Function.Name
-
-		if funcName == "read_file" {
-			var args struct {
-				FilePath string `json:"file_path"`
-			}
-			err := json.NewDecoder(strings.NewReader(string(toolCall.Function.Arguments))).Decode(&args)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "error parsing tool call arguments: %v\n", err)
-				os.Exit(1)
-			}
-
-			content, err := os.ReadFile(args.FilePath)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "error reading file: %v\n", err)
-				os.Exit(1)
-			}
-
-			fmt.Print(string(content))
 		}
-	} else {
-		// No tool calls, print the message content
-		fmt.Print(resp.Choices[0].Message.Content)
+
+		resp, err := client.Chat.Completions.New(context.Background(), params)
+
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
+		if len(resp.Choices) == 0 {
+			panic("No choices in response")
+		}
+		// You can use print statements as follows for debugging, they'll be visible when running tests.
+		fmt.Fprintln(os.Stderr, "Logs from your program will appear here!")
+
+		choice := resp.Choices[0]
+		message := choice.Message
+
+		messages = append(messages, message.ToParam())
+
+		if len(message.ToolCalls) > 0 {
+
+			for _, toolCall := range message.ToolCalls {
+
+				toolName := toolCall.Function.Name
+				if toolName == "read_file" {
+					var args struct {
+						FilePath string `json:"file_path"`
+					}
+					err := json.NewDecoder(strings.NewReader(string(toolCall.Function.Arguments))).Decode(&args)
+					if err != nil {
+						fmt.Sprintf("Error: %v", err)
+						os.Exit(1)
+					}
+
+					result, error := os.ReadFile(args.FilePath)
+					if error != nil {
+						fmt.Sprintf("Error: %v", error)
+					}
+
+					messages = append(messages, openai.ToolMessage(string(result), toolCall.ID))
+				}
+			}
+
+		} else {
+			// No tool calls, print the message content
+			fmt.Print(choice.Message.Content)
+		}
 	}
 }
